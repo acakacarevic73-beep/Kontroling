@@ -29,3 +29,5 @@ Kategorija, Podkategorija, Jan_Plan, Jan_Ostvarenje, Feb_Plan, Feb_Ostvarenje...
 ​React (Frontend framework)
 ​Recharts (Vizualizacija podataka)
 ​Lucide React (Ikonice)
+
+Live demo aplikacije možete pogledati na: https://kacarevic-kontroling.netlify.app
