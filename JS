@@ -1,3 +1,15 @@
+import { 
+  TrendingUp, 
+  Settings, 
+  Users, 
+  Link as LinkIcon, 
+  Activity, 
+  ArrowUpRight, 
+  ArrowDownRight,
+  AlertTriangle,
+  CheckCircle2,
+  Database
+} from "lucide-react";
 
 import { useState, useCallback, useMemo, useRef } from "react";
 
