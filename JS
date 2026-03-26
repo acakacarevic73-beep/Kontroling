@@ -1,0 +1,236 @@
+
+import { useState, useCallback, useMemo, useRef } from "react";
+
+import {
+
+  BarChart, Bar, LineChart, Line, ComposedChart,
+
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+
+  ResponsiveContainer, ReferenceLine, Cell, PieChart, Pie
+
+} from "recharts";
+
+
+
+// ─── DESIGN TOKENS ────────────────────────────────────────────────────────────
+
+const C = {
+
+  bg:       "#0d0f14",
+
+  surface:  "#13161e",
+
+  card:     "#181c27",
+
+  border:   "#232840",
+
+  accent:   "#4f8ef7",
+
+  accentD:  "#2d5fc4",
+
+  gold:     "#f0b429",
+
+  green:    "#22c55e",
+
+  red:      "#ef4444",
+
+  orange:   "#f97316",
+
+  text:     "#e8ecf5",
+
+  muted:    "#6b7799",
+
+  dim:      "#3a4060",
+
+};
+
+
+
+// ─── SAMPLE DATA ──────────────────────────────────────────────────────────────
+
+const SAMPLE_CSV = `Kategorija,Podkategorija,Jan_Plan,Jan_Ostvarenje,Feb_Plan,Feb_Ostvarenje,Mar_Plan,Mar_Ostvarenje,Apr_Plan,Apr_Ostvarenje,Maj_Plan,Maj_Ostvarenje,Jun_Plan,Jun_Ostvarenje
+
+Prihodi,Prihodi od prodaje,850000,812000,870000,895000,920000,908000,950000,963000,980000,945000,1000000,1042000
+
+Prihodi,Ostali prihodi,45000,38000,45000,52000,50000,47000,50000,55000,55000,49000,55000,61000
+
+COGS,Materijal,320000,335000,330000,318000,345000,352000,360000,347000,370000,381000,380000,372000
+
+COGS,Radna snaga - direktna,95000,98000,97000,94000,102000,105000,106000,102000,109000,112000,112000,108000
+
+COGS,Amortizacija,28000,28000,28000,28000,28000,28000,28000,28000,28000,28000,28000,28000
+
+Troškovi prodaje,Plate prodaja,65000,68000,66000,67000,68000,70000,70000,72000,72000,73000,74000,76000
+
+Troškovi prodaje,Komisije,25000,22000,26000,28000,27000,26000,28000,30000,29000,27000,30000,33000
+
+Troškovi prodaje,Marketing,40000,35000,42000,48000,44000,41000,45000,43000,46000,44000,48000,52000
+
+OpEx,Plate administracija,55000,55000,55000,55000,58000,58000,58000,58000,60000,60000,60000,60000
+
+OpEx,Zakup i komunalije,22000,23500,22000,22800,22000,23100,22000,22400,22000,23000,22000,22700
+
+OpEx,IT i softver,12000,11200,12000,13400,12000,11800,12000,12500,12000,11900,12000,12300
+
+OpEx,Ostali OpEx,18000,21000,18000,16500,19000,20200,19000,17800,20000,22100,20000,19400
+
+Broj kupaca,Novi kupci,120,108,125,138,130,127,135,142,140,133,145,158
+
+Broj kupaca,Aktivni kupci,850,823,870,856,890,879,910,924,930,918,950,967
+
+Prodajni ciklus,Dana do zatvaranja,32,35,31,29,30,31,29,28,29,30,28,27
+
+Zalihe,Dana vezivanja zaliha,45,52,44,48,43,46,42,44,41,47,40,43
+
+Potraživanja,Dana naplate,38,42,37,39,36,38,35,36,34,37,33,35`;
+
+
+
+// ─── CSV PARSER ───────────────────────────────────────────────────────────────
+
+function parseCSV(text) {
+
+  const lines = text.trim().split("\n");
+
+  const headers = lines[0].split(",").map(h => h.trim());
+
+  return lines.slice(1).map(line => {
+
+    const vals = line.split(",").map(v => v.trim());
+
+    const obj = {};
+
+    headers.forEach((h, i) => {
+
+      const n = parseFloat(vals[i]);
+
+      obj[h] = isNaN(n) ? vals[i] : n;
+
+    });
+
+    return obj;
+
+  });
+
+}
+
+
+
+const MONTHS = ["Jan","Feb","Mar","Apr","Maj","Jun","Jul","Avg","Sep","Okt","Nov","Dec"];
+
+
+
+function buildMonthlyData(rows) {
+
+  const months = [];
+
+  MONTHS.forEach(m => {
+
+    const pKey = `${m}_Plan`;
+
+    const oKey = `${m}_Ostvarenje`;
+
+    const hasData = rows.some(r => r[pKey] !== undefined);
+
+    if (!hasData) return;
+
+
+
+    const sum = (cat, subcat) => {
+
+      const r = rows.find(x => (cat ? x.Kategorija === cat : true) && (subcat ? x.Podkategorija === subcat : true));
+
+      return r ? r : null;
+
+    };
+
+
+
+    const getGroup = (cat) => rows.filter(r => r.Kategorija === cat);
+
+
+
+    const prihodi = getGroup("Prihodi").reduce((a,r) => ({ p: a.p+(r[pKey]||0), o: a.o+(r[oKey]||0) }), {p:0,o:0});
+
+    const cogs    = getGroup("COGS").reduce((a,r) => ({ p: a.p+(r[pKey]||0), o: a.o+(r[oKey]||0) }), {p:0,o:0});
+
+    const opex    = getGroup("OpEx").reduce((a,r) => ({ p: a.p+(r[pKey]||0), o: a.o+(r[oKey]||0) }), {p:0,o:0});
+
+    const prodaja = getGroup("Troškovi prodaje").reduce((a,r) => ({ p: a.p+(r[pKey]||0), o: a.o+(r[oKey]||0) }), {p:0,o:0});
+
+
+
+    const grossP = { p: prihodi.p - cogs.p, o: prihodi.o - cogs.o };
+
+    const ebitda = { p: grossP.p - opex.p - prodaja.p, o: grossP.o - opex.o - prodaja.o };
+
+
+
+    const noviKupciRow = rows.find(r => r.Podkategorija === "Novi kupci");
+
+    const aktivniRow   = rows.find(r => r.Podkategorija === "Aktivni kupci");
+
+    const ciklusRow    = rows.find(r => r.Podkategorija === "Dana do zatvaranja");
+
+    const zaliheRow    = rows.find(r => r.Podkategorija === "Dana vezivanja zaliha");
+
+    const potrRow      = rows.find(r => r.Podkategorija === "Dana naplate");
+
+
+
+    months.push({
+
+      mesec: m,
+
+      prihodi_p: prihodi.p, prihodi_o: prihodi.o,
+
+      cogs_p: cogs.p, cogs_o: cogs.o,
+
+      gross_p: grossP.p, gross_o: grossP.o,
+
+      opex_p: opex.p, opex_o: opex.o,
+
+      prodaja_p: prodaja.p, prodaja_o: prodaja.o,
+
+      ebitda_p: ebitda.p, ebitda_o: ebitda.o,
+
+      gross_margin_p: prihodi.p ? (grossP.p/prihodi.p*100) : 0,
+
+      gross_margin_o: prihodi.o ? (grossP.o/prihodi.o*100) : 0,
+
+      ebitda_margin_p: prihodi.p ? (ebitda.p/prihodi.p*100) : 0,
+
+      ebitda_margin_o: prihodi.o ? (ebitda.o/prihodi.o*100) : 0,
+
+      novi_kupci_p:    noviKupciRow ? noviKupciRow[pKey] : 0,
+
+      novi_kupci_o:    noviKupciRow ? noviKupciRow[oKey] : 0,
+
+      aktivni_p:       aktivniRow   ? aktivniRow[pKey]   : 0,
+
+      aktivni_o:       aktivniRow   ? aktivniRow[oKey]   : 0,
+
+      ciklus_p:        ciklusRow    ? ciklusRow[pKey]    : 0,
+
+      ciklus_o:        ciklusRow    ? ciklusRow[oKey]    : 0,
+
+      zalihe_p:        zaliheRow    ? zaliheRow[pKey]    : 0,
+
+      zalihe_o:        zaliheRow    ? zaliheRow[oKey]    : 0,
+
+      potrazivanja_p:  potrRow      ? potrRow[pKey]      : 0,
+
+      potrazivanja_o:  potrRow      ? potrRow[oKey]      : 0,
+
+    });
+
+  });
+
+  return months;
+
+}
+
+
+
+
