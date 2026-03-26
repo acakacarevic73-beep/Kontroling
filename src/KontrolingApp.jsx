@@ -1784,10 +1784,4 @@ export default function KontrolingApp() {
   );
 
 }
-return (
-    <div style={{ backgroundColor: C.bg, minHeight: '100vh', color: C.text }}>
-       {/* UI Dashboard-a */}
-    </div>
-  );
-}
 
