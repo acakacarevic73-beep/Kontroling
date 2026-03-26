@@ -245,4 +245,1550 @@ function buildMonthlyData(rows) {
 
 
 
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+const fmt = (n, dec=0) => n === undefined || n === null ? "—" : new Intl.NumberFormat("sr-RS", {minimumFractionDigits:dec,maximumFractionDigits:dec}).format(n);
+
+const fmtK = n => Math.abs(n) >= 1000000 ? `${(n/1000000).toFixed(1)}M` : Math.abs(n) >= 1000 ? `${(n/1000).toFixed(0)}K` : n;
+
+const variance = (p,o) => p ? ((o-p)/p*100) : 0;
+
+const varColor = (v, inv=false) => {
+
+  const pos = inv ? v < 0 : v > 0;
+
+  return pos ? C.green : v === 0 ? C.muted : C.red;
+
+};
+
+const varSign = v => v > 0 ? "▲" : v < 0 ? "▼" : "—";
+
+
+
+// ─── CUSTOM TOOLTIP ───────────────────────────────────────────────────────────
+
+const CustomTooltip = ({ active, payload, label }) => {
+
+  if (!active || !payload?.length) return null;
+
+  return (
+
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", fontSize: 12, color: C.text }}>
+
+      <div style={{ fontWeight: 700, marginBottom: 6, color: C.accent }}>{label}</div>
+
+      {payload.map((p,i) => (
+
+        <div key={i} style={{ color: p.color, marginBottom: 2 }}>
+
+          {p.name}: <strong>{fmtK(p.value)}</strong>
+
+        </div>
+
+      ))}
+
+    </div>
+
+  );
+
+};
+
+
+
+// ─── KPI CARD ─────────────────────────────────────────────────────────────────
+
+function KpiCard({ label, plan, ostvarenje, unit="", inverted=false, decimals=0 }) {
+
+  const v = variance(plan, ostvarenje);
+
+  const col = varColor(v, inverted);
+
+  return (
+
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "16px 20px", flex:1, minWidth:160 }}>
+
+      <div style={{ fontSize: 11, color: C.muted, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom: 8 }}>{label}</div>
+
+      <div style={{ fontSize: 26, fontWeight: 800, color: C.text, letterSpacing:"-0.02em" }}>{fmt(ostvarenje, decimals)}{unit}</div>
+
+      <div style={{ display:"flex", gap:12, marginTop:8, fontSize:12 }}>
+
+        <span style={{ color: C.muted }}>Plan: {fmt(plan, decimals)}{unit}</span>
+
+        <span style={{ color: col, fontWeight:700 }}>{varSign(v)} {Math.abs(v).toFixed(1)}%</span>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+
+// ─── SECTION HEADER ───────────────────────────────────────────────────────────
+
+function SectionHeader({ icon, title, sub }) {
+
+  return (
+
+    <div style={{ marginBottom: 20 }}>
+
+      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+
+        <span style={{ fontSize: 22 }}>{icon}</span>
+
+        <h2 style={{ margin:0, fontSize:18, fontWeight:800, color:C.text, letterSpacing:"-0.01em" }}>{title}</h2>
+
+      </div>
+
+      {sub && <div style={{ fontSize:12, color:C.muted, marginTop:4, marginLeft:32 }}>{sub}</div>}
+
+    </div>
+
+  );
+
+}
+
+
+
+// ─── VARIANCE TABLE ───────────────────────────────────────────────────────────
+
+function VarianceTable({ rows, monthlyData }) {
+
+  if (!rows.length || !monthlyData.length) return null;
+
+  const lastM = monthlyData[monthlyData.length - 1];
+
+  const m = lastM.mesec;
+
+
+
+  const tableRows = rows.map(r => {
+
+    const pKey = `${m}_Plan`;
+
+    const oKey = `${m}_Ostvarenje`;
+
+    const p = r[pKey] || 0;
+
+    const o = r[oKey] || 0;
+
+    const v = variance(p, o);
+
+    const isCost = ["COGS","OpEx","Troškovi prodaje"].includes(r.Kategorija);
+
+    return { ...r, p, o, v, isCost };
+
+  });
+
+
+
+  return (
+
+    <div style={{ overflowX:"auto" }}>
+
+      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+
+        <thead>
+
+          <tr style={{ borderBottom:`2px solid ${C.border}` }}>
+
+            {["Kategorija","Pozicija","Plan","Ostvarenje","Apsolutna var.","% var."].map(h => (
+
+              <th key={h} style={{ textAlign: h==="Kategorija"||h==="Pozicija"?"left":"right", padding:"8px 12px", color:C.muted, fontWeight:600, fontSize:11, textTransform:"uppercase", letterSpacing:"0.06em" }}>{h}</th>
+
+            ))}
+
+          </tr>
+
+        </thead>
+
+        <tbody>
+
+          {tableRows.map((r,i) => {
+
+            const col = varColor(r.v, r.isCost);
+
+            return (
+
+              <tr key={i} style={{ borderBottom:`1px solid ${C.border}`, background: i%2===0?C.surface:C.card }}>
+
+                <td style={{ padding:"8px 12px", color:C.muted, fontSize:12 }}>{r.Kategorija}</td>
+
+                <td style={{ padding:"8px 12px", color:C.text, fontWeight:500 }}>{r.Podkategorija}</td>
+
+                <td style={{ padding:"8px 12px", textAlign:"right", color:C.muted }}>{fmt(r.p)}</td>
+
+                <td style={{ padding:"8px 12px", textAlign:"right", color:C.text, fontWeight:600 }}>{fmt(r.o)}</td>
+
+                <td style={{ padding:"8px 12px", textAlign:"right", color:col, fontWeight:600 }}>{r.o-r.p >= 0 ? "+" : ""}{fmt(r.o-r.p)}</td>
+
+                <td style={{ padding:"8px 12px", textAlign:"right" }}>
+
+                  <span style={{ background: col+"22", color: col, borderRadius:4, padding:"2px 8px", fontWeight:700, fontSize:12 }}>
+
+                    {varSign(r.v)} {Math.abs(r.v).toFixed(1)}%
+
+                  </span>
+
+                </td>
+
+              </tr>
+
+            );
+
+          })}
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+  );
+
+}
+
+
+
+// ─── WATERFALL CHART ──────────────────────────────────────────────────────────
+
+function WaterfallChart({ monthlyData }) {
+
+  if (!monthlyData.length) return null;
+
+  const last = monthlyData[monthlyData.length - 1];
+
+  const items = [
+
+    { name: "Prihodi", value: last.prihodi_o, type: "positive" },
+
+    { name: "COGS", value: -last.cogs_o, type: "negative" },
+
+    { name: "Bruto dobit", value: last.gross_o, type: "total" },
+
+    { name: "Tr. prodaje", value: -last.prodaja_o, type: "negative" },
+
+    { name: "OpEx", value: -last.opex_o, type: "negative" },
+
+    { name: "EBITDA", value: last.ebitda_o, type: "total" },
+
+  ];
+
+
+
+  let running = 0;
+
+  const data = items.map(item => {
+
+    if (item.type === "total") {
+
+      return { ...item, base: 0, bar: item.value };
+
+    }
+
+    const base = item.type === "positive" ? 0 : running + item.value;
+
+    const bar = Math.abs(item.value);
+
+    running += item.value;
+
+    return { ...item, base: Math.max(0, base), bar };
+
+  });
+
+
+
+  return (
+
+    <ResponsiveContainer width="100%" height={280}>
+
+      <BarChart data={data} margin={{ top:10, right:20, left:40, bottom:10 }}>
+
+        <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+        <XAxis dataKey="name" tick={{ fill:C.muted, fontSize:12 }} axisLine={false} tickLine={false} />
+
+        <YAxis tickFormatter={fmtK} tick={{ fill:C.muted, fontSize:11 }} axisLine={false} tickLine={false} />
+
+        <Tooltip content={<CustomTooltip />} />
+
+        <Bar dataKey="base" stackId="a" fill="transparent" />
+
+        <Bar dataKey="bar" stackId="a" radius={[4,4,0,0]}>
+
+          {data.map((d,i) => (
+
+            <Cell key={i} fill={
+
+              d.type === "total" ? C.accent :
+
+              d.type === "positive" ? C.green : C.red
+
+            } />
+
+          ))}
+
+        </Bar>
+
+      </BarChart>
+
+    </ResponsiveContainer>
+
+  );
+
+}
+
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+
+// MODULE 1: FINANSIJSKI KONTROLING
+
+// ══════════════════════════════════════════════════════════════════════════════
+
+function FinancijskiKontroling({ rows, monthlyData }) {
+
+  if (!monthlyData.length) return null;
+
+
+
+  const ytdP = monthlyData.reduce((a,m) => ({
+
+    prihodi: a.prihodi + m.prihodi_p, cogs: a.cogs + m.cogs_p,
+
+    opex: a.opex + m.opex_p, prodaja: a.prodaja + m.prodaja_p,
+
+    ebitda: a.ebitda + m.ebitda_p
+
+  }), { prihodi:0, cogs:0, opex:0, prodaja:0, ebitda:0 });
+
+
+
+  const ytdO = monthlyData.reduce((a,m) => ({
+
+    prihodi: a.prihodi + m.prihodi_o, cogs: a.cogs + m.cogs_o,
+
+    opex: a.opex + m.opex_o, prodaja: a.prodaja + m.prodaja_o,
+
+    ebitda: a.ebitda + m.ebitda_o
+
+  }), { prihodi:0, cogs:0, opex:0, prodaja:0, ebitda:0 });
+
+
+
+  const last = monthlyData[monthlyData.length-1];
+
+
+
+  const financRows = rows.filter(r => ["Prihodi","COGS","OpEx","Troškovi prodaje"].includes(r.Kategorija));
+
+
+
+  const costStructureData = [
+
+    { name: "COGS", value: last.cogs_o, fill: C.red },
+
+    { name: "Tr. prodaje", value: last.prodaja_o, fill: C.orange },
+
+    { name: "OpEx", value: last.opex_o, fill: C.gold },
+
+    { name: "EBITDA", value: last.ebitda_o, fill: C.green },
+
+  ];
+
+
+
+  return (
+
+    <div>
+
+      <SectionHeader icon="💰" title="Finansijski Kontroling" sub="P&L analiza · Struktura troškova · Marže · YTD varijansi" />
+
+
+
+      {/* KPI Row */}
+
+      <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:24 }}>
+
+        <KpiCard label="Prihodi (mesec)" plan={last.prihodi_p} ostvarenje={last.prihodi_o} />
+
+        <KpiCard label="Bruto marža" plan={last.gross_margin_p} ostvarenje={last.gross_margin_o} unit="%" decimals={1} />
+
+        <KpiCard label="EBITDA (mesec)" plan={last.ebitda_p} ostvarenje={last.ebitda_o} />
+
+        <KpiCard label="EBITDA marža" plan={last.ebitda_margin_p} ostvarenje={last.ebitda_margin_o} unit="%" decimals={1} />
+
+      </div>
+
+
+
+      {/* Charts row */}
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:24 }}>
+
+        {/* P&L Trend */}
+
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+
+          <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Prihodi: Plan vs. Ostvarenje</div>
+
+          <ResponsiveContainer width="100%" height={200}>
+
+            <ComposedChart data={monthlyData} margin={{top:0,right:10,left:0,bottom:0}}>
+
+              <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+              <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+              <YAxis tickFormatter={fmtK} tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+              <Tooltip content={<CustomTooltip />} />
+
+              <Bar dataKey="prihodi_p" name="Plan" fill={C.dim} radius={[3,3,0,0]} />
+
+              <Bar dataKey="prihodi_o" name="Ostvarenje" fill={C.accent} radius={[3,3,0,0]} />
+
+              <Line dataKey="ebitda_o" name="EBITDA" stroke={C.gold} strokeWidth={2} dot={false} />
+
+            </ComposedChart>
+
+          </ResponsiveContainer>
+
+        </div>
+
+
+
+        {/* Struktura troškova */}
+
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+
+          <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Struktura troškova (poslednji mesec)</div>
+
+          <div style={{ display:"flex", alignItems:"center" }}>
+
+            <ResponsiveContainer width="55%" height={200}>
+
+              <PieChart>
+
+                <Pie data={costStructureData} cx="50%" cy="50%" innerRadius={55} outerRadius={80} dataKey="value" strokeWidth={0}>
+
+                  {costStructureData.map((d,i) => <Cell key={i} fill={d.fill} />)}
+
+                </Pie>
+
+                <Tooltip formatter={(v) => fmtK(v)} />
+
+              </PieChart>
+
+            </ResponsiveContainer>
+
+            <div style={{ flex:1, fontSize:12 }}>
+
+              {costStructureData.map((d,i) => (
+
+                <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+
+                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+
+                    <div style={{ width:10, height:10, borderRadius:"50%", background:d.fill }} />
+
+                    <span style={{ color:C.muted }}>{d.name}</span>
+
+                  </div>
+
+                  <span style={{ color:C.text, fontWeight:600 }}>{fmtK(d.value)}</span>
+
+                </div>
+
+              ))}
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+
+      {/* Waterfall */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:24 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>P&L Waterfall — Rastavljanje do EBITDA (poslednji mesec)</div>
+
+        <WaterfallChart monthlyData={monthlyData} />
+
+      </div>
+
+
+
+      {/* Marže trend */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:24 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Trend marži (%)</div>
+
+        <ResponsiveContainer width="100%" height={180}>
+
+          <LineChart data={monthlyData} margin={{top:0,right:10,left:0,bottom:0}}>
+
+            <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+            <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+            <YAxis unit="%" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+            <Tooltip content={<CustomTooltip />} />
+
+            <Legend wrapperStyle={{fontSize:12,color:C.muted}} />
+
+            <Line dataKey="gross_margin_o" name="Bruto marža" stroke={C.green} strokeWidth={2} dot={{r:3,fill:C.green}} />
+
+            <Line dataKey="ebitda_margin_o" name="EBITDA marža" stroke={C.gold} strokeWidth={2} dot={{r:3,fill:C.gold}} />
+
+            <Line dataKey="gross_margin_p" name="Bruto plan" stroke={C.green} strokeWidth={1} strokeDasharray="4 4" dot={false} />
+
+            <Line dataKey="ebitda_margin_p" name="EBITDA plan" stroke={C.gold} strokeWidth={1} strokeDasharray="4 4" dot={false} />
+
+          </LineChart>
+
+        </ResponsiveContainer>
+
+      </div>
+
+
+
+      {/* YTD Summary */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:24 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:16 }}>YTD Sažetak</div>
+
+        {[
+
+          { label:"Ukupni prihodi", p: ytdP.prihodi, o: ytdO.prihodi },
+
+          { label:"COGS ukupno", p: ytdP.cogs, o: ytdO.cogs, inv:true },
+
+          { label:"Troš. prodaje", p: ytdP.prodaja, o: ytdO.prodaja, inv:true },
+
+          { label:"OpEx ukupno", p: ytdP.opex, o: ytdO.opex, inv:true },
+
+          { label:"EBITDA", p: ytdP.ebitda, o: ytdO.ebitda },
+
+        ].map((row,i) => {
+
+          const v = variance(row.p, row.o);
+
+          const col = varColor(v, row.inv);
+
+          return (
+
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 0", borderBottom: i<4?`1px solid ${C.border}`:"none" }}>
+
+              <span style={{ color:C.muted, fontSize:13 }}>{row.label}</span>
+
+              <div style={{ display:"flex", gap:24, fontSize:13 }}>
+
+                <span style={{ color:C.dim }}>Plan: {fmtK(row.p)}</span>
+
+                <span style={{ color:C.text, fontWeight:700 }}>{fmtK(row.o)}</span>
+
+                <span style={{ color:col, fontWeight:700, minWidth:60, textAlign:"right" }}>{varSign(v)} {Math.abs(v).toFixed(1)}%</span>
+
+              </div>
+
+            </div>
+
+          );
+
+        })}
+
+      </div>
+
+
+
+      {/* Variance Table */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Detaljne varijanse po pozicijama (poslednji mesec)</div>
+
+        <VarianceTable rows={financRows} monthlyData={monthlyData} />
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+
+// MODULE 2: OPERACIONI KONTROLING
+
+// ══════════════════════════════════════════════════════════════════════════════
+
+function OperacioniKontroling({ rows, monthlyData }) {
+
+  if (!monthlyData.length) return null;
+
+  const last = monthlyData[monthlyData.length-1];
+
+
+
+  const wccData = monthlyData.map(m => ({
+
+    mesec: m.mesec,
+
+    "Zalihe (dana)_P": m.zalihe_p,
+
+    "Zalihe (dana)_O": m.zalihe_o,
+
+    "Potraživanja (dana)_P": m.potrazivanja_p,
+
+    "Potraživanja (dana)_O": m.potrazivanja_o,
+
+    "NWC (est.)": m.zalihe_o + m.potrazivanja_o,
+
+  }));
+
+
+
+  const cogsRows = rows.filter(r => r.Kategorija === "COGS");
+
+
+
+  return (
+
+    <div>
+
+      <SectionHeader icon="⚙️" title="Operacioni Kontroling" sub="Efikasnost procesa · Working capital · Struktura troškova proizvodnje" />
+
+
+
+      <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:24 }}>
+
+        <KpiCard label="Dana naplate (DSO)" plan={last.potrazivanja_p} ostvarenje={last.potrazivanja_o} inverted decimals={0} />
+
+        <KpiCard label="Dana zaliha (DIO)" plan={last.zalihe_p} ostvarenje={last.zalihe_o} inverted decimals={0} />
+
+        <KpiCard label="COGS mesec" plan={last.cogs_p} ostvarenje={last.cogs_o} inverted />
+
+        <KpiCard label="COGS / Prihodi" plan={last.prihodi_p ? last.cogs_p/last.prihodi_p*100 : 0} ostvarenje={last.prihodi_o ? last.cogs_o/last.prihodi_o*100 : 0} unit="%" decimals={1} inverted />
+
+      </div>
+
+
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:24 }}>
+
+        {/* Working Capital */}
+
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+
+          <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Potraživanja — Plan vs. Ostvarenje (dana)</div>
+
+          <ResponsiveContainer width="100%" height={200}>
+
+            <ComposedChart data={monthlyData} margin={{top:0,right:10,left:0,bottom:0}}>
+
+              <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+              <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+              <YAxis tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} unit="d" />
+
+              <Tooltip content={<CustomTooltip />} />
+
+              <ReferenceLine y={35} stroke={C.red} strokeDasharray="4 4" label={{ value:"Target", fill:C.red, fontSize:11 }} />
+
+              <Bar dataKey="potrazivanja_p" name="Plan (dana)" fill={C.dim} radius={[3,3,0,0]} />
+
+              <Bar dataKey="potrazivanja_o" name="Ostvarenje (dana)" fill={C.orange} radius={[3,3,0,0]} />
+
+            </ComposedChart>
+
+          </ResponsiveContainer>
+
+        </div>
+
+
+
+        {/* Zalihe */}
+
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+
+          <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Zalihe — Plan vs. Ostvarenje (dana)</div>
+
+          <ResponsiveContainer width="100%" height={200}>
+
+            <ComposedChart data={monthlyData} margin={{top:0,right:10,left:0,bottom:0}}>
+
+              <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+              <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+              <YAxis tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} unit="d" />
+
+              <Tooltip content={<CustomTooltip />} />
+
+              <ReferenceLine y={42} stroke={C.red} strokeDasharray="4 4" label={{ value:"Target", fill:C.red, fontSize:11 }} />
+
+              <Bar dataKey="zalihe_p" name="Plan (dana)" fill={C.dim} radius={[3,3,0,0]} />
+
+              <Bar dataKey="zalihe_o" name="Ostvarenje (dana)" fill={C.gold} radius={[3,3,0,0]} />
+
+            </ComposedChart>
+
+          </ResponsiveContainer>
+
+        </div>
+
+      </div>
+
+
+
+      {/* COGS trend */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:24 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>COGS Trend — Plan vs. Ostvarenje</div>
+
+        <ResponsiveContainer width="100%" height={200}>
+
+          <ComposedChart data={monthlyData} margin={{top:0,right:10,left:10,bottom:0}}>
+
+            <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+            <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+            <YAxis tickFormatter={fmtK} tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+            <Tooltip content={<CustomTooltip />} />
+
+            <Legend wrapperStyle={{fontSize:12,color:C.muted}} />
+
+            <Bar dataKey="cogs_p" name="COGS Plan" fill={C.dim} radius={[3,3,0,0]} />
+
+            <Bar dataKey="cogs_o" name="COGS Ostvarenje" fill={C.red} radius={[3,3,0,0]} opacity={0.85} />
+
+          </ComposedChart>
+
+        </ResponsiveContainer>
+
+      </div>
+
+
+
+      {/* NWC trend */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:24 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Net Working Capital (NWC) — Trend u danima</div>
+
+        <ResponsiveContainer width="100%" height={180}>
+
+          <LineChart data={wccData} margin={{top:0,right:10,left:0,bottom:0}}>
+
+            <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+            <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+            <YAxis tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} unit="d" />
+
+            <Tooltip content={<CustomTooltip />} />
+
+            <Legend wrapperStyle={{fontSize:12,color:C.muted}} />
+
+            <Line dataKey="NWC (est.)" stroke={C.accent} strokeWidth={2.5} dot={{r:3}} />
+
+            <Line dataKey="Zalihe (dana)_O" name="Zalihe" stroke={C.gold} strokeWidth={1.5} dot={false} />
+
+            <Line dataKey="Potraživanja (dana)_O" name="Potraž." stroke={C.orange} strokeWidth={1.5} dot={false} />
+
+          </LineChart>
+
+        </ResponsiveContainer>
+
+      </div>
+
+
+
+      {/* COGS breakdown table */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Varijanse COGS pozicija (poslednji mesec)</div>
+
+        <VarianceTable rows={cogsRows} monthlyData={monthlyData} />
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+
+// MODULE 3: PRODAJNI KONTROLING
+
+// ══════════════════════════════════════════════════════════════════════════════
+
+function ProdajniKontroling({ rows, monthlyData }) {
+
+  if (!monthlyData.length) return null;
+
+  const last = monthlyData[monthlyData.length-1];
+
+
+
+  const salesRows = rows.filter(r => r.Kategorija === "Troškovi prodaje");
+
+  const noviTrend = monthlyData.map(m => ({ mesec:m.mesec, "Novi_P":m.novi_kupci_p, "Novi_O":m.novi_kupci_o, "Aktivni_P":m.aktivni_p, "Aktivni_O":m.aktivni_o }));
+
+  const ciklusTrend = monthlyData.map(m => ({ mesec:m.mesec, "Dana_P":m.ciklus_p, "Dana_O":m.ciklus_o }));
+
+
+
+  const cac = last.prihodi_o && last.aktivni_o ? (last.prodaja_o / last.aktivni_o) : 0;
+
+  const arpa = last.aktivni_o ? (last.prihodi_o / last.aktivni_o) : 0;
+
+
+
+  return (
+
+    <div>
+
+      <SectionHeader icon="📈" title="Prodajni Kontroling" sub="Pipeline · Kupci · Efikasnost prodajnog tima · CAC / ARPA" />
+
+
+
+      <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:24 }}>
+
+        <KpiCard label="Novi kupci" plan={last.novi_kupci_p} ostvarenje={last.novi_kupci_o} />
+
+        <KpiCard label="Aktivni kupci" plan={last.aktivni_p} ostvarenje={last.aktivni_o} />
+
+        <KpiCard label="Prodajni ciklus (dana)" plan={last.ciklus_p} ostvarenje={last.ciklus_o} inverted />
+
+        <KpiCard label="ARPA (po kupcu)" plan={0} ostvarenje={Math.round(arpa)} />
+
+      </div>
+
+
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:24 }}>
+
+        {/* Kupci trend */}
+
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+
+          <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Novi kupci — Plan vs. Ostvarenje</div>
+
+          <ResponsiveContainer width="100%" height={200}>
+
+            <ComposedChart data={noviTrend} margin={{top:0,right:10,left:0,bottom:0}}>
+
+              <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+              <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+              <YAxis tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+              <Tooltip content={<CustomTooltip />} />
+
+              <Bar dataKey="Novi_P" name="Plan" fill={C.dim} radius={[3,3,0,0]} />
+
+              <Bar dataKey="Novi_O" name="Ostvarenje" fill={C.accent} radius={[3,3,0,0]} />
+
+            </ComposedChart>
+
+          </ResponsiveContainer>
+
+        </div>
+
+
+
+        {/* Aktivni kupci */}
+
+        <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+
+          <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Aktivni kupci — Trend</div>
+
+          <ResponsiveContainer width="100%" height={200}>
+
+            <ComposedChart data={noviTrend} margin={{top:0,right:10,left:0,bottom:0}}>
+
+              <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+              <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+              <YAxis tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+              <Tooltip content={<CustomTooltip />} />
+
+              <Line dataKey="Aktivni_P" name="Plan" stroke={C.dim} strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
+
+              <Line dataKey="Aktivni_O" name="Ostvarenje" stroke={C.green} strokeWidth={2} dot={{r:3,fill:C.green}} />
+
+            </ComposedChart>
+
+          </ResponsiveContainer>
+
+        </div>
+
+      </div>
+
+
+
+      {/* Prodajni ciklus */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:24 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Prodajni ciklus — Dana do zatvaranja posla</div>
+
+        <ResponsiveContainer width="100%" height={180}>
+
+          <ComposedChart data={ciklusTrend} margin={{top:0,right:10,left:0,bottom:0}}>
+
+            <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+            <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+            <YAxis tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} unit="d" />
+
+            <Tooltip content={<CustomTooltip />} />
+
+            <ReferenceLine y={28} stroke={C.green} strokeDasharray="4 4" label={{ value:"Target 28d", fill:C.green, fontSize:11 }} />
+
+            <Bar dataKey="Dana_P" name="Plan" fill={C.dim} radius={[3,3,0,0]} />
+
+            <Bar dataKey="Dana_O" name="Ostvarenje" fill={C.orange} radius={[3,3,0,0]} />
+
+          </ComposedChart>
+
+        </ResponsiveContainer>
+
+      </div>
+
+
+
+      {/* Prodajni troškovi */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:24 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Troškovi prodaje — Trend</div>
+
+        <ResponsiveContainer width="100%" height={180}>
+
+          <ComposedChart data={monthlyData} margin={{top:0,right:10,left:10,bottom:0}}>
+
+            <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+            <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+            <YAxis tickFormatter={fmtK} tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+            <Tooltip content={<CustomTooltip />} />
+
+            <Bar dataKey="prodaja_p" name="Plan" fill={C.dim} radius={[3,3,0,0]} />
+
+            <Bar dataKey="prodaja_o" name="Ostvarenje" fill={C.accent} radius={[3,3,0,0]} opacity={0.85} />
+
+          </ComposedChart>
+
+        </ResponsiveContainer>
+
+      </div>
+
+
+
+      {/* Varijanse */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>Varijanse prodajnih troškova (poslednji mesec)</div>
+
+        <VarianceTable rows={salesRows} monthlyData={monthlyData} />
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+
+// MODULE 4: INTEGRISANI PREGLED
+
+// ══════════════════════════════════════════════════════════════════════════════
+
+function IntegrisaniPregled({ rows, monthlyData }) {
+
+  if (!monthlyData.length) return null;
+
+  const last = monthlyData[monthlyData.length-1];
+
+
+
+  // Signal score computation
+
+  const scores = [
+
+    { label:"Prihodi", v: variance(last.prihodi_p, last.prihodi_o), inv:false },
+
+    { label:"EBITDA marža", v: variance(last.ebitda_margin_p, last.ebitda_margin_o), inv:false },
+
+    { label:"COGS efikasnost", v: variance(last.cogs_p, last.cogs_o), inv:true },
+
+    { label:"Novi kupci", v: variance(last.novi_kupci_p, last.novi_kupci_o), inv:false },
+
+    { label:"DSO", v: variance(last.potrazivanja_p, last.potrazivanja_o), inv:true },
+
+    { label:"Prodajni ciklus", v: variance(last.ciklus_p, last.ciklus_o), inv:true },
+
+    { label:"Zalihe", v: variance(last.zalihe_p, last.zalihe_o), inv:true },
+
+    { label:"ARPA trend", v: variance(last.prihodi_p/Math.max(1,last.aktivni_p), last.prihodi_o/Math.max(1,last.aktivni_o)), inv:false },
+
+  ].map(s => ({
+
+    ...s,
+
+    signal: s.inv ? (s.v < -5 ? "🔴" : s.v < 0 ? "🟡" : "🟢") : (s.v > 5 ? "🟢" : s.v > 0 ? "🟡" : "🔴"),
+
+    score: s.inv ? (s.v < -5 ? 0 : s.v < 0 ? 1 : 2) : (s.v > 5 ? 2 : s.v > 0 ? 1 : 0),
+
+  }));
+
+
+
+  const totalScore = scores.reduce((a,s) => a+s.score, 0);
+
+  const maxScore = scores.length * 2;
+
+  const scoreRatio = totalScore / maxScore;
+
+  const healthColor = scoreRatio >= 0.7 ? C.green : scoreRatio >= 0.4 ? C.gold : C.red;
+
+  const healthLabel = scoreRatio >= 0.7 ? "DOBRO" : scoreRatio >= 0.4 ? "PAŽNJA" : "KRITIČNO";
+
+
+
+  // Radar-style summary data
+
+  const radarData = monthlyData.map(m => ({
+
+    mesec: m.mesec,
+
+    "Prihodi %": m.prihodi_p ? (m.prihodi_o/m.prihodi_p*100) : 100,
+
+    "EBITDA %": m.ebitda_p ? (m.ebitda_o/m.ebitda_p*100) : 100,
+
+    "Kupci %": m.novi_kupci_p ? (m.novi_kupci_o/m.novi_kupci_p*100) : 100,
+
+  }));
+
+
+
+  const cogsToRevData = monthlyData.map(m => ({
+
+    mesec: m.mesec,
+
+    "COGS/Rev Plan": m.prihodi_p ? +(m.cogs_p/m.prihodi_p*100).toFixed(1) : 0,
+
+    "COGS/Rev Ost": m.prihodi_o ? +(m.cogs_o/m.prihodi_o*100).toFixed(1) : 0,
+
+  }));
+
+
+
+  return (
+
+    <div>
+
+      <SectionHeader icon="🔗" title="Integrisani Pregled" sub="Međuzavisnost finansijskog · operacionog · prodajnog kontrolinga" />
+
+
+
+      {/* Health Score */}
+
+      <div style={{ background:C.card, border:`2px solid ${healthColor}44`, borderRadius:12, padding:20, marginBottom:24 }}>
+
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:12 }}>
+
+          <div>
+
+            <div style={{ fontSize:11, color:C.muted, textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:6 }}>Ukupni zdravstveni skor firme</div>
+
+            <div style={{ fontSize:42, fontWeight:900, color:healthColor, letterSpacing:"-0.03em" }}>{totalScore}/{maxScore}</div>
+
+            <div style={{ fontSize:16, fontWeight:700, color:healthColor, marginTop:4 }}>{healthLabel}</div>
+
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, flex:1, maxWidth:480 }}>
+
+            {scores.map((s,i) => (
+
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", background:C.surface, borderRadius:6 }}>
+
+                <span style={{ fontSize:14 }}>{s.signal}</span>
+
+                <span style={{ fontSize:12, color:C.muted }}>{s.label}</span>
+
+                <span style={{ fontSize:12, color:varColor(s.v, s.inv), fontWeight:600, marginLeft:"auto" }}>
+
+                  {varSign(s.v)}{Math.abs(s.v).toFixed(1)}%
+
+                </span>
+
+              </div>
+
+            ))}
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+
+      {/* Ostvarenje % po oblastima */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:24 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:12 }}>% Ostvarenja plana — Prihodi · EBITDA · Kupci</div>
+
+        <ResponsiveContainer width="100%" height={220}>
+
+          <LineChart data={radarData} margin={{top:0,right:10,left:0,bottom:0}}>
+
+            <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+            <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+            <YAxis unit="%" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} domain={[70,130]} />
+
+            <Tooltip content={<CustomTooltip />} />
+
+            <Legend wrapperStyle={{fontSize:12,color:C.muted}} />
+
+            <ReferenceLine y={100} stroke={C.muted} strokeDasharray="6 3" label={{ value:"Plan=100%", fill:C.muted, fontSize:11 }} />
+
+            <Line dataKey="Prihodi %" stroke={C.accent} strokeWidth={2.5} dot={{r:3}} />
+
+            <Line dataKey="EBITDA %" stroke={C.gold} strokeWidth={2.5} dot={{r:3}} />
+
+            <Line dataKey="Kupci %" stroke={C.green} strokeWidth={2.5} dot={{r:3}} />
+
+          </LineChart>
+
+        </ResponsiveContainer>
+
+      </div>
+
+
+
+      {/* COGS/Rev ratio */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:16, marginBottom:24 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:4 }}>Operaciona efikasnost → Finansijski efekat: COGS/Prihodi (%)</div>
+
+        <div style={{ fontSize:11, color:C.muted, marginBottom:12 }}>Porast ovog racia direktno erodira bruto i EBITDA maržu</div>
+
+        <ResponsiveContainer width="100%" height={180}>
+
+          <ComposedChart data={cogsToRevData} margin={{top:0,right:10,left:0,bottom:0}}>
+
+            <CartesianGrid strokeDasharray="3 3" stroke={C.dim} />
+
+            <XAxis dataKey="mesec" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} />
+
+            <YAxis unit="%" tick={{fill:C.muted,fontSize:11}} axisLine={false} tickLine={false} domain={[30,50]} />
+
+            <Tooltip content={<CustomTooltip />} />
+
+            <Legend wrapperStyle={{fontSize:12,color:C.muted}} />
+
+            <Bar dataKey="COGS/Rev Plan" fill={C.dim} radius={[3,3,0,0]} />
+
+            <Bar dataKey="COGS/Rev Ost" fill={C.red} radius={[3,3,0,0]} opacity={0.85} />
+
+          </ComposedChart>
+
+        </ResponsiveContainer>
+
+      </div>
+
+
+
+      {/* Integrisana matrica */}
+
+      <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:20 }}>
+
+        <div style={{ fontSize:13, fontWeight:700, color:C.text, marginBottom:16 }}>Matrica međuzavisnosti — Efekat lančanog prenosa</div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
+
+          {[
+
+            { from:"📈 Prodajni", to:"💰 Finansijski", effect:"Rast prihoda poboljšava EBITDA maržu samo ako je COGS pod kontrolom", status: variance(last.prihodi_p, last.prihodi_o) > 0 },
+
+            { from:"⚙️ Operacioni", to:"💰 Finansijski", effect:"Skraćivanje DSO i DIO oslobađa gotovinu i smanjuje kamatne troškove", status: variance(last.potrazivanja_p, last.potrazivanja_o) < 0 },
+
+            { from:"📈 Prodajni", to:"⚙️ Operacioni", effect:"Kraći prodajni ciklus smanjuje WIP zalihe i pritisak na radni kapital", status: variance(last.ciklus_p, last.ciklus_o) < 0 },
+
+            { from:"⚙️ Operacioni", to:"📈 Prodajni", effect:"Niži COGS/Rev dozvoljava fleksibilniju cenovnu politiku i veće komisije", status: variance(last.cogs_p/Math.max(1,last.prihodi_p), last.cogs_o/Math.max(1,last.prihodi_o)) < 0 },
+
+          ].map((rel,i) => (
+
+            <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:14, padding:"12px 14px", background: i%2===0?C.surface:C.card, borderRadius:6 }}>
+
+              <span style={{ fontSize:18 }}>{rel.status ? "✅" : "⚠️"}</span>
+
+              <div>
+
+                <div style={{ fontSize:12, color:C.accent, fontWeight:700, marginBottom:3 }}>
+
+                  {rel.from} → {rel.to}
+
+                </div>
+
+                <div style={{ fontSize:12, color:C.muted }}>{rel.effect}</div>
+
+              </div>
+
+            </div>
+
+          ))}
+
+        </div>
+
+      </div>
+
+    </div>
+
+  );
+
+}
+
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+
+// MAIN APP
+
+// ══════════════════════════════════════════════════════════════════════════════
+
+export default function KontrolingApp() {
+
+  const [tab, setTab] = useState("finansijski");
+
+  const [rows, setRows] = useState([]);
+
+  const [monthlyData, setMonthlyData] = useState([]);
+
+  const [loaded, setLoaded] = useState(false);
+
+  const [dragging, setDragging] = useState(false);
+
+  const fileRef = useRef();
+
+
+
+  const loadSample = () => {
+
+    const r = parseCSV(SAMPLE_CSV);
+
+    setRows(r);
+
+    setMonthlyData(buildMonthlyData(r));
+
+    setLoaded(true);
+
+  };
+
+
+
+  const handleFile = useCallback((file) => {
+
+    if (!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+
+      try {
+
+        let text = e.target.result;
+
+        const r = parseCSV(text);
+
+        setRows(r);
+
+        setMonthlyData(buildMonthlyData(r));
+
+        setLoaded(true);
+
+      } catch(err) {
+
+        alert("Greška pri parsiranju fajla. Proveri format.");
+
+      }
+
+    };
+
+    reader.readAsText(file, "UTF-8");
+
+  }, []);
+
+
+
+  const tabs = [
+
+    { key:"finansijski", label:"Finansijski", icon:"💰" },
+
+    { key:"operacioni",  label:"Operacioni",  icon:"⚙️" },
+
+    { key:"prodajni",    label:"Prodajni",    icon:"📈" },
+
+    { key:"integrisani", label:"Integrisani", icon:"🔗" },
+
+  ];
+
+
+
+  return (
+
+    <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'DM Sans', 'Segoe UI', sans-serif" }}>
+
+      {/* Header */}
+
+      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 32px" }}>
+
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", height:56, maxWidth:1200, margin:"0 auto" }}>
+
+          <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+
+            <div style={{ width:32, height:32, background:`linear-gradient(135deg,${C.accentD},${C.accent})`, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>📊</div>
+
+            <div>
+
+              <div style={{ fontSize:15, fontWeight:800, color:C.text, letterSpacing:"-0.01em" }}>Kontroling Pro</div>
+
+              <div style={{ fontSize:10, color:C.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>Plan · Ostvarenje · Analiza</div>
+
+            </div>
+
+          </div>
+
+
+
+          {loaded && (
+
+            <div style={{ display:"flex", gap:4 }}>
+
+              {tabs.map(t => (
+
+                <button key={t.key} onClick={() => setTab(t.key)}
+
+                  style={{ padding:"7px 16px", borderRadius:6, border:"none", cursor:"pointer", fontSize:12, fontWeight:600,
+
+                    background: tab===t.key ? C.accent : "transparent",
+
+                    color: tab===t.key ? "#fff" : C.muted,
+
+                    transition:"all 0.15s"
+
+                  }}>
+
+                  <span style={{ marginRight:5 }}>{t.icon}</span>{t.label}
+
+                </button>
+
+              ))}
+
+            </div>
+
+          )}
+
+
+
+          <button onClick={() => { fileRef.current?.click(); }}
+
+            style={{ padding:"7px 16px", borderRadius:6, border:`1px solid ${C.border}`, background:"transparent", color:C.muted, cursor:"pointer", fontSize:12 }}>
+
+            ⬆ Upload CSV
+
+          </button>
+
+          <input ref={fileRef} type="file" accept=".csv,.txt" style={{ display:"none" }} onChange={e => handleFile(e.target.files[0])} />
+
+        </div>
+
+      </div>
+
+
+
+      {/* Body */}
+
+      <div style={{ maxWidth:1200, margin:"0 auto", padding:"32px 32px" }}>
+
+
+
+        {!loaded ? (
+
+          /* Landing */
+
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"70vh", gap:24 }}>
+
+            <div style={{ textAlign:"center", maxWidth:560 }}>
+
+              <div style={{ fontSize:48, marginBottom:16 }}>📊</div>
+
+              <h1 style={{ margin:0, fontSize:32, fontWeight:900, color:C.text, letterSpacing:"-0.03em" }}>Kontroling Pro</h1>
+
+              <p style={{ color:C.muted, fontSize:15, marginTop:12, lineHeight:1.6 }}>
+
+                Kompletan alat za finansijski, operacioni i prodajni kontroling.<br />
+
+                Uploaduj CSV fajl ili učitaj demo podatke.
+
+              </p>
+
+            </div>
+
+
+
+            {/* Drop zone */}
+
+            <div
+
+              onDragOver={e => { e.preventDefault(); setDragging(true); }}
+
+              onDragLeave={() => setDragging(false)}
+
+              onDrop={e => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]); }}
+
+              style={{
+
+                border: `2px dashed ${dragging ? C.accent : C.border}`,
+
+                borderRadius: 12, padding: "40px 60px", textAlign:"center",
+
+                background: dragging ? C.accent+"11" : C.card,
+
+                cursor:"pointer", transition:"all 0.2s", minWidth:380
+
+              }}
+
+              onClick={() => fileRef.current?.click()}
+
+            >
+
+              <div style={{ fontSize:36, marginBottom:12 }}>📂</div>
+
+              <div style={{ color:C.text, fontWeight:600, marginBottom:6 }}>Prevuci CSV fajl ovde</div>
+
+              <div style={{ color:C.muted, fontSize:13 }}>ili klikni da odabereš fajl</div>
+
+            </div>
+
+
+
+            <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+
+              <div style={{ height:1, width:100, background:C.border }} />
+
+              <span style={{ color:C.dim, fontSize:13 }}>ili</span>
+
+              <div style={{ height:1, width:100, background:C.border }} />
+
+            </div>
+
+
+
+            <button onClick={loadSample}
+
+              style={{ padding:"13px 36px", background:`linear-gradient(135deg,${C.accentD},${C.accent})`, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontSize:15, fontWeight:700, letterSpacing:"-0.01em" }}>
+
+              Učitaj demo podatke
+
+            </button>
+
+
+
+            {/* CSV format */}
+
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:10, padding:20, maxWidth:640, width:"100%" }}>
+
+              <div style={{ fontSize:12, fontWeight:700, color:C.accent, marginBottom:10, textTransform:"uppercase", letterSpacing:"0.08em" }}>Format CSV fajla</div>
+
+              <div style={{ fontSize:12, color:C.muted, lineHeight:1.8 }}>
+
+                <strong style={{color:C.text}}>Obavezne kolone:</strong> Kategorija, Podkategorija, [Mes]_Plan, [Mes]_Ostvarenje<br />
+
+                <strong style={{color:C.text}}>Kategorije:</strong> Prihodi · COGS · OpEx · Troškovi prodaje · Broj kupaca · Prodajni ciklus · Zalihe · Potraživanja<br />
+
+                <strong style={{color:C.text}}>Meseci:</strong> Jan, Feb, Mar, Apr, Maj, Jun, Jul, Avg, Sep, Okt, Nov, Dec<br />
+
+                <strong style={{color:C.text}}>Primer:</strong> Jan_Plan, Jan_Ostvarenje, Feb_Plan, Feb_Ostvarenje...
+
+              </div>
+
+            </div>
+
+          </div>
+
+        ) : (
+
+          <div>
+
+            {tab === "finansijski" && <FinancijskiKontroling rows={rows} monthlyData={monthlyData} />}
+
+            {tab === "operacioni"  && <OperacioniKontroling  rows={rows} monthlyData={monthlyData} />}
+
+            {tab === "prodajni"    && <ProdajniKontroling    rows={rows} monthlyData={monthlyData} />}
+
+            {tab === "integrisani" && <IntegrisaniPregled    rows={rows} monthlyData={monthlyData} />}
+
+          </div>
+
+        )}
+
+      </div>
+
+    </div>
+
+  );
+
+}
+return (
+    <div style={{ backgroundColor: C.bg, minHeight: '100vh', color: C.text }}>
+       {/* UI Dashboard-a */}
+    </div>
+  );
+}
+
 
